@@ -1,0 +1,45 @@
+---
+title: "Comparison of _Zostera noltii_ seagrass reflectance taken in 2018 and 2025"
+author: "Lee, Chengfa Benjamin"
+date: "`r Sys.Date()`"
+output: bookdown::html_document2
+bibliography: references.bib 
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(magrittr)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(ggiraph)
+library(ggpubr)
+library(patchwork)
+```
+
+This study looks at the reflectance measurements of the _Zostera noltii_ seagrass at Bourgneuf Bay in 2018 and 2025.
+
+All analyses were performed in R version 4.5.2 [@Rversion].
+All work belong to the [REWRITE project](https://rewriteproject.eu/).
+
+# Method
+
+## Study sites
+
+Fieldwork was done in Bourgneuf Bay. 
+
+```{r templateRchunk}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+
+print('hello world')
+```
+
+
+
+# References
