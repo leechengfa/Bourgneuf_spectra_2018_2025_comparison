@@ -14,30 +14,232 @@ knitr::opts_chunk$set(echo = TRUE)
 library(magrittr)
 library(readxl)
 library(dplyr)
+library(tidyr)
+library(stringr)
+library(zoo)
 library(ggplot2)
 library(ggiraph)
 library(ggpubr)
-library(patchwork)
 ```
 
 This study looks at the reflectance measurements of the _Zostera noltii_ seagrass at Bourgneuf Bay in 2018 and 2025.
 
-All analyses were performed in R version 4.5.2 [@Rversion].
-All work belong to the [REWRITE project](https://rewriteproject.eu/).
+All analyses were performed in R version 4.5.2 [@Rversion] and belong to the [REWRITE project](https://rewriteproject.eu/). The data were collected under the [CoastObs project](https://coastobs.eu/success-story/french-atlantic-coast) and REWRITE.
 
-# Method
+# Data
 
-## Study sites
+ASD measurements, seagrass percent cover estimation and sample collection were done on the seagrasses at Bourgneuf Bay in 2018 and 2025. The hyperspectral data for each station were averaged and smoothed. The collected samples were then sorted, dried and weighed in the laboratory to obtain the leaf dry weight. For a more detailed description of the methods, please refer to @zoffoli2020 and [the 2025 fieldwork GitPage]((https://sigoiry.github.io/Fieldtrip_Rewrite_Sept2025/)).  
 
-Fieldwork was done in Bourgneuf Bay. 
-
-```{r templateRchunk}
+```{r preprocessing2018}
 #| echo: false
 #| error: false
 #| message: false
 #| warning: false
 
-print('hello world')
+csv.2018 <- local({
+  biomass <- read.csv('data/2018/2018_09_Bourgneuf_cores_biomass_percent_cover.csv', sep = '\t')
+  reflectance <- read.table('data/2018/2018_09_Bourgneuf_reflectance-cores_raw.txt', header = TRUE) %>%
+    pivot_longer(cols = names(.)[-1], names_to = "Sample_ID", values_to = 'raw.value')
+  
+    reflectance$Sample_ID <- reflectance$Sample_ID %>%
+      lapply(FUN = function(string) {
+        string %>%
+          strsplit(split = "\\.") %>% 
+          unlist() %>%
+          "["(1) %>%
+          strsplit(split = "_") %>% 
+          unlist() %>%
+          "["(-length(.)) %>%
+          paste(collapse = "_")
+      }) %>%
+      unlist()
+  
+ output <- biomass %>%
+    right_join(reflectance, by = NULL) %>%
+  group_by(Sample_ID) %>%
+  mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), ndvi = (raw.value[wavelength == 800] - raw.value[wavelength == 670])/(raw.value[wavelength == 800] + raw.value[wavelength == 670]), .keep = "all") %>%
+  ungroup %>%
+  pivot_longer(cols = c(raw.value, norm.value), names_to = 'processing', values_to = 'value') %>%
+  rename(Wavelength = wavelength, Station = Sample_ID, Leaf_DW = Leaf_dry_weight_g)
+ 
+  output$processing <- factor(output$processing, levels = c('raw.value', 'norm.value'), labels = c('Raw reflectance', 'Min-max normalised reflectance'))
+  output$year <- 2018
+  
+ output
+})
+```
+
+```{r preprocessing2025}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+
+csv.2025 <- local({
+  biomass <- read_xlsx('data/2025/DryWeight_Cores.xlsx')
+  reflectance <- read.csv('data/2025/20250911_Bourgneuf_H_stations_reflectance.txt', sep = '\t') %>%
+    pivot_longer(cols = names(.) %>% grep('Wavelength', ., invert = TRUE, value = TRUE), names_to = "ASD", values_to = 'value')
+    
+    reflectance$Station <- lapply(reflectance$ASD, FUN = function(string) {
+      str_split(string, '\\.') %>%
+        unlist() %>%
+        "["(1)
+      }) %>% 
+      unlist()
+  
+  output <- reflectance %>%
+    group_by(Wavelength,Station) %>%
+    summarise(raw.value = mean(value, na.rm = TRUE)) %>%
+    ungroup() %>%
+    group_by(Station) %>%
+    mutate(raw.value = rollapply(raw.value, 11, mean, partial = TRUE, align = 'center'), .keep = 'all') %>% 
+    ungroup() %>%
+    filter(Wavelength >= 400, Wavelength <= 900) %>%
+    group_by(Station) %>%
+    mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), ndvi = (raw.value[Wavelength == 800] - raw.value[Wavelength == 670])/(raw.value[Wavelength == 800] + raw.value[Wavelength == 670]), .keep = "all") %>%
+    ungroup()
+  
+  output$Station <- output$Station %>%
+    gsub('H', "H_", .)  
+  
+  output <- output %>% 
+    left_join(biomass) %>%
+    pivot_longer(cols = c(raw.value, norm.value), names_to = 'processing', values_to = 'value')
+    output$processing <- factor(output$processing, levels = c('raw.value', 'norm.value'), labels = c('Raw reflectance', 'Min-max normalised reflectance'))
+  
+  output$year <- 2025
+  output$Percent_cover <- NA
+  
+  output %>%
+    select(-B) %>%
+    rename(Leaf_DW = A)
+})
+```
+
+```{r combine.datasets}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+
+csv <- rbind(csv.2018, csv.2025)
+```
+
+
+# Comparison
+
+
+Figure \@ref(fig:compareSpcDw). Log relationship fits really well for the 2018 data.
+
+
+
+
+```{r compareSpcDw}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of leaf percent cover against its logarithmic-transformed leaf dry weight. For now, only the 2018 dataset has leaf percent cover data. For the purpose of clarity, stations with no (zero) leaf dry weight were removed from the analysis as their log-transformed value would be negative infinity. Regardless, their presence/absence did not affect the regression equation or R-squared value.
+
+plt.spc_dw <- csv %>%
+  select(Station, Percent_cover, Leaf_DW, year) %>%
+  unique() %>%
+  filter(Leaf_DW != 0) %>%
+  ggplot(aes(x = Percent_cover, y = log(Leaf_DW))) +
+    geom_smooth(method = 'lm') +
+    geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+    xlab('Seagrass cover (%)') + ylab('Logarithmic-transformed leaf dry weight (g)') +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
+    facet_grid(. ~ year)
+
+girafe(ggobj = plt.spc_dw,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 6, width_svg = 10
+  )
+```
+
+Figure \@ref(fig:compareNdviDw). Log relationship does not fit as well for the NDVI comparison. also, seagrasses have a higher leaf dry weight in 2018 than in 2025.
+
+```{r compareNdviDw}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of NDVI against leaf dry weight.
+
+plt.ndvi_dw <- csv %>%
+  select(Station, Percent_cover, Leaf_DW, year, processing, ndvi) %>%
+  unique() %>%
+  ggplot(aes(x = ndvi, y = Leaf_DW)) +
+    geom_smooth(method = 'lm') +
+    geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+    xlab('NDVI') + ylab('Leaf dry weight (g)') +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
+    facet_grid(. ~ year,  scales = 'free')
+
+girafe(ggobj = plt.ndvi_dw,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 6, width_svg = 10
+  )
+```
+
+Figure \@ref(fig:compareHsSpc).
+
+
+```{r compareHsSpc}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of reflectance spectra against the leaf percent cover. For now, only the 2018 dataset has leaf percent cover data.
+
+plt.spectra_spc <- ggplot(csv, aes(x = Wavelength, y = value, group = Station, colour = Percent_cover)) +
+  geom_line_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+  xlab('Wavelength (nm)') + ylab('Reflectance') +
+  scale_colour_viridis_c('Seagrass cover (%)') + 
+  facet_grid(processing ~ year,  scales = 'free')
+
+girafe(ggobj = plt.spectra_spc,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 6, width_svg = 10
+  )
+```
+
+Figure \@ref(fig:compareHsDw).
+
+```{r compareHsDw}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of reflectance spectra against the leaf dry weight.
+
+plt.spectra_dw <- ggplot(csv, aes(x = Wavelength, y = value, group = Station, colour = Leaf_DW)) +
+  geom_line_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+  xlab('Wavelength (nm)') + ylab('Reflectance') +
+  scale_colour_viridis_c('Leaf dry weight (g)') + 
+  facet_grid(processing ~ year,  scales = 'free')
+
+girafe(ggobj = plt.spectra_dw,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 6, width_svg = 10
+  )
 ```
 
 
