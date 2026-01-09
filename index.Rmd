@@ -24,11 +24,11 @@ library(ggpubr)
 
 This study looks at the reflectance measurements of the _Zostera noltii_ seagrass at Bourgneuf Bay in 2018 and 2025.
 
-All analyses were performed in R version 4.5.2 [@Rversion] and belong to the [REWRITE project](https://rewriteproject.eu/). The data were collected under the [CoastObs project](https://coastobs.eu/success-story/french-atlantic-coast) and REWRITE.
+All analyses were performed in R version 4.5.2 [@Rversion] and belong to the [REWRITE project](https://rewriteproject.eu/). The 2018 data was collected under [CoastObs](https://coastobs.eu/success-story/french-atlantic-coast) and the 2025 data under REWRITE.
 
 # Data
 
-ASD measurements, seagrass percent cover estimation and sample collection were done on the seagrasses at Bourgneuf Bay in 2018 and 2025. The hyperspectral data for each station were averaged and smoothed. The collected samples were then sorted, dried and weighed in the laboratory to obtain the leaf dry weight. For a more detailed description of the methods, please refer to @zoffoli2020 and [the 2025 fieldwork GitPage]((https://sigoiry.github.io/Fieldtrip_Rewrite_Sept2025/)).  
+ASD measurements, seagrass percent cover estimation and sample collection were done on the seagrasses at Bourgneuf Bay in 2018 and 2025. The hyperspectral data for each station were averaged and smoothed. NDVI was calculated based on the 670 nm and 800 nm wavelengths. Meanwhile, the collected samples were then sorted, dried and weighed in the laboratory to obtain the leaf dry weight. For a more detailed description of the methods, please refer to @zoffoli2020 and [the 2025 fieldwork GitPage]((https://sigoiry.github.io/Fieldtrip_Rewrite_Sept2025/)).  
 
 ```{r preprocessing2018}
 #| echo: false
@@ -39,7 +39,8 @@ ASD measurements, seagrass percent cover estimation and sample collection were d
 csv.2018 <- local({
   biomass <- read.csv('data/2018/2018_09_Bourgneuf_cores_biomass_percent_cover.csv', sep = '\t')
   reflectance <- read.table('data/2018/2018_09_Bourgneuf_reflectance-cores_raw.txt', header = TRUE) %>%
-    pivot_longer(cols = names(.)[-1], names_to = "Sample_ID", values_to = 'raw.value')
+    pivot_longer(cols = names(.)[-1], names_to = "Sample_ID", values_to = 'raw.value') %>%
+    filter(wavelength >= 400, wavelength <= 900)
   
     reflectance$Sample_ID <- reflectance$Sample_ID %>%
       lapply(FUN = function(string) {
@@ -55,12 +56,12 @@ csv.2018 <- local({
       unlist()
   
  output <- biomass %>%
-    right_join(reflectance, by = NULL) %>%
-  group_by(Sample_ID) %>%
-  mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), ndvi = (raw.value[wavelength == 800] - raw.value[wavelength == 670])/(raw.value[wavelength == 800] + raw.value[wavelength == 670]), .keep = "all") %>%
-  ungroup %>%
-  pivot_longer(cols = c(raw.value, norm.value), names_to = 'processing', values_to = 'value') %>%
-  rename(Wavelength = wavelength, Station = Sample_ID, Leaf_DW = Leaf_dry_weight_g)
+    full_join(reflectance, by = NULL) %>%
+    group_by(Sample_ID) %>%
+    mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), ndvi = (raw.value[wavelength == 800] - raw.value[wavelength == 670])/(raw.value[wavelength == 800] + raw.value[wavelength == 670]), .keep = "all") %>%
+    ungroup %>%
+    pivot_longer(cols = c(raw.value, norm.value), names_to = 'processing', values_to = 'value') %>%
+    rename(Wavelength = wavelength, Station = Sample_ID, Leaf_DW = Leaf_dry_weight_g)
  
   output$processing <- factor(output$processing, levels = c('raw.value', 'norm.value'), labels = c('Raw reflectance', 'Min-max normalised reflectance'))
   output$year <- 2018
@@ -103,7 +104,7 @@ csv.2025 <- local({
     gsub('H', "H_", .)  
   
   output <- output %>% 
-    left_join(biomass) %>%
+    full_join(biomass) %>%
     pivot_longer(cols = c(raw.value, norm.value), names_to = 'processing', values_to = 'value')
     output$processing <- factor(output$processing, levels = c('raw.value', 'norm.value'), labels = c('Raw reflectance', 'Min-max normalised reflectance'))
   
@@ -128,10 +129,7 @@ csv <- rbind(csv.2018, csv.2025)
 
 # Comparison
 
-
-Figure \@ref(fig:compareSpcDw). Log relationship fits really well for the 2018 data.
-
-
+For the 2018 dataset, there is a linear relationship between the logarithmic-transformed leaf dry weight and the leaf percent cover (Figure \@ref(fig:compareSpcDw)). This suggests that there is a saturation of leaf percent cover at larger leaf dry weight/biomass. For example, the stations with a 100% seagrass cover had dry weights ranging from 3.72 g (zos_d_61) up to 5.23 g (zos_a_61).
 
 
 ```{r compareSpcDw}
@@ -162,14 +160,18 @@ girafe(ggobj = plt.spc_dw,
   )
 ```
 
-Figure \@ref(fig:compareNdviDw). Log relationship does not fit as well for the NDVI comparison. also, seagrasses have a higher leaf dry weight in 2018 than in 2025.
+
+The logarithmic-transformed NDVI model had a better R-squared value for the 2018 dataset but a worse R-squared value for the 2025 dataset. The logarithmic-transformed dry weight model performed worse. Thus, the linear model was kept.  
+
+Between 2018 and 2025, it is apparent that the 2018 dataset have a higher leaf dry weight and larger spectroradiometer-derived NDVI values than the 2025 dataset (Figure \@ref(fig:compareNdviDw)). Also, the gradient of the relationship is different between the two years. This would suggest that caution should be exercised when transferring reflectance-to-biomass relationship across time.
+
 
 ```{r compareNdviDw}
 #| echo: false
 #| error: false
 #| message: false
 #| warning: false
-#| fig.cap: Comparison of NDVI against leaf dry weight.
+#| fig.cap: Comparison of spectroradiometer-derived NDVI against leaf dry weight.
 
 plt.ndvi_dw <- csv %>%
   select(Station, Percent_cover, Leaf_DW, year, processing, ndvi) %>%
@@ -177,7 +179,7 @@ plt.ndvi_dw <- csv %>%
   ggplot(aes(x = ndvi, y = Leaf_DW)) +
     geom_smooth(method = 'lm') +
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
-    xlab('NDVI') + ylab('Leaf dry weight (g)') +
+    xlab('Spectroradiometer-derived NDVI') + ylab('Leaf dry weight (g)') +
     stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
     facet_grid(. ~ year,  scales = 'free')
 
@@ -191,7 +193,8 @@ girafe(ggobj = plt.ndvi_dw,
   )
 ```
 
-Figure \@ref(fig:compareHsSpc).
+
+The 2018 dataset demonstrate that the normalised reflectance would substantially decrease with an increase in seagrass cover, up to about 70% seagrass cover (Figure \@ref(fig:compareHsSpc)). Beyond 70% seagrass cover, the decrease in the normalised reflectance spectra is small and not as consistent. For example, between 700 nm and 900 nm, while stations with a 100% seagrass cover such as zos_d_61 and zos_e_61 had a lower spectra in this range than seagrass covers with less than 100%, there were also other stations with a 100% seagrass cover such as zos_a_61 and zos_c_61 that instead had a higher spectra.  
 
 
 ```{r compareHsSpc}
@@ -199,12 +202,12 @@ Figure \@ref(fig:compareHsSpc).
 #| error: false
 #| message: false
 #| warning: false
-#| fig.cap: Comparison of reflectance spectra against the leaf percent cover. For now, only the 2018 dataset has leaf percent cover data.
+#| fig.cap: Comparison of reflectance spectra against the leaf percent cover. For now, only the 2018 dataset has leaf percent cover data, so the 2025 dataset is greyed out.
 
 plt.spectra_spc <- ggplot(csv, aes(x = Wavelength, y = value, group = Station, colour = Percent_cover)) +
   geom_line_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
   xlab('Wavelength (nm)') + ylab('Reflectance') +
-  scale_colour_viridis_c('Seagrass cover (%)') + 
+  scale_colour_viridis_c('Seagrass cover (%)', option = 'turbo') + 
   facet_grid(processing ~ year,  scales = 'free')
 
 girafe(ggobj = plt.spectra_spc,
@@ -217,7 +220,11 @@ girafe(ggobj = plt.spectra_spc,
   )
 ```
 
-Figure \@ref(fig:compareHsDw).
+
+When the reflectance spectra was compared against the leaf dry weight, there is also a pattern of a lower reflectance spectra with increasing dry weight, in particular the normalised spectra (Figure \@ref(fig:compareHsDw)). However, the proportion or numbers were not similar between the two epochs. For example, the normalised reflectance for a station with a dry weight of around 5 g in 2018 has a similar spectra with one in 2025 with a dry weight of around 1.4 g (H_13). A station with a dry weight of about 1.5 g in 2018 (zos_21) would instead have a similar normalised reflectance to a station in 2025 with a dry weight of about 1 g (H_29). Particularly, there seems to be a consistently/relatively lower normalised reflectance at 670 nm with increasing dry weight. 
+
+It is more difficult to comment the same about the raw reflectance, as the raw reflectances in 2025 seem to have either more overlaps or possibly differences in ambient light.
+
 
 ```{r compareHsDw}
 #| echo: false
@@ -229,7 +236,7 @@ Figure \@ref(fig:compareHsDw).
 plt.spectra_dw <- ggplot(csv, aes(x = Wavelength, y = value, group = Station, colour = Leaf_DW)) +
   geom_line_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
   xlab('Wavelength (nm)') + ylab('Reflectance') +
-  scale_colour_viridis_c('Leaf dry weight (g)') + 
+  scale_colour_viridis_c('Leaf dry weight (g)', option = 'turbo') + 
   facet_grid(processing ~ year,  scales = 'free')
 
 girafe(ggobj = plt.spectra_dw,
