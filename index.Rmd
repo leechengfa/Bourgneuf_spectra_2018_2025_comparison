@@ -83,7 +83,7 @@ csv.2019 <- local({
     rename(c(Station = Sample_ID, ndvi = NDVI, Leaf_DW = `Leaf biomass (g DW m-2)`, Root_DW = `Rizhome biomass  (g DW m-2)`, Percent_cover = `Seagrass coverage (%)`))
   
   output$Wavelength <- NA
-  output$processing <- NA
+  output$processing <- 'Raw reflectance'
   output$value <- NA
   output$year <- 2019
   
@@ -167,7 +167,7 @@ plt.spc_dw <- csv %>%
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
     xlab('Leaf dry weight (g/m^2)') + ylab('Root dry weight (g/m^2)') +
     xlim(c(0, max(csv.2025$Leaf_DW, na.rm = TRUE))) + ylim(c(0, max(csv.2025$Root_DW, na.rm = TRUE))) +
-    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue') +
     facet_grid(. ~ year)
 
 girafe(ggobj = plt.spc_dw,
@@ -176,7 +176,7 @@ girafe(ggobj = plt.spc_dw,
            opts_hover_inv(css = "opacity:0.25"),
            opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
          ),
-         height_svg = 6, width_svg = 10
+         height_svg = 5, width_svg = 12
   )
 ```
 
@@ -198,7 +198,7 @@ plt.spc_dw <- csv %>%
     geom_smooth(method = 'lm') +
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
     xlab('Seagrass cover (%)') + ylab('Logarithmic-transformed leaf dry weight (g)') +
-    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue') +
     facet_grid(. ~ year)
 
 girafe(ggobj = plt.spc_dw,
@@ -207,7 +207,7 @@ girafe(ggobj = plt.spc_dw,
            opts_hover_inv(css = "opacity:0.25"),
            opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
          ),
-         height_svg = 6, width_svg = 10
+         height_svg = 5, width_svg = 12
   )
 ```
 
@@ -231,7 +231,7 @@ plt.ndvi_dw <- csv %>%
     geom_smooth(method = 'lm') +
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
     xlab('Spectroradiometer-derived NDVI') + ylab('Leaf dry weight (g)') +
-    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue') +
     facet_grid(. ~ year,  scales = 'free')
 
 girafe(ggobj = plt.ndvi_dw,
@@ -240,7 +240,7 @@ girafe(ggobj = plt.ndvi_dw,
            opts_hover_inv(css = "opacity:0.25"),
            opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
          ),
-         height_svg = 6, width_svg = 10
+         height_svg = 5, width_svg = 12
   )
 ```
 
@@ -267,7 +267,7 @@ girafe(ggobj = plt.spectra_spc,
            opts_hover_inv(css = "opacity:0.25"),
            opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
          ),
-         height_svg = 6, width_svg = 10
+         height_svg = 5, width_svg = 12
   )
 ```
 
@@ -296,7 +296,7 @@ girafe(ggobj = plt.spectra_dw,
            opts_hover_inv(css = "opacity:0.25"),
            opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
          ),
-         height_svg = 6, width_svg = 10
+         height_svg = 5, width_svg = 12
   )
 ```
 
