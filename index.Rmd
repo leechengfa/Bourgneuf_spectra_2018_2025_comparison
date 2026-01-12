@@ -38,6 +38,7 @@ ASD measurements, seagrass percent cover estimation and sample collection were d
 
 csv.2018 <- local({
   biomass <- read.csv('data/2018/2018_09_Bourgneuf_cores_biomass_percent_cover.csv', sep = '\t')
+    biomass$Leaf_dry_weight_g <- biomass$Leaf_dry_weight_g * 100^2 / (pi*7.5^2)
   reflectance <- read.table('data/2018/2018_09_Bourgneuf_reflectance-cores_raw.txt', header = TRUE) %>%
     pivot_longer(cols = names(.)[-1], names_to = "Sample_ID", values_to = 'raw.value') %>%
     filter(wavelength >= 400, wavelength <= 900)
@@ -98,6 +99,8 @@ csv.2019 <- local({
 
 csv.2025 <- local({
   biomass <- read_xlsx('data/2025/DryWeight_Cores.xlsx')
+    biomass$A <- biomass$A * 100^2 / (pi*7.5^2)
+    biomass$B <- biomass$B * 100^2 / (pi*7.5^2)
   reflectance <- read.csv('data/2025/20250911_Bourgneuf_H_stations_reflectance.txt', sep = '\t') %>%
     pivot_longer(cols = names(.) %>% grep('Wavelength', ., invert = TRUE, value = TRUE), names_to = "ASD", values_to = 'value')
     
@@ -147,6 +150,35 @@ csv <- rbind(csv.2018, csv.2019, csv.2025)
 
 
 # Comparison
+
+```{r compareLeafRoot}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of leaf biomass to root biomass.
+
+plt.spc_dw <- csv %>%
+  select(Station, Leaf_DW, Root_DW, year) %>%
+  unique() %>%
+  filter(Leaf_DW != 0) %>%
+  ggplot(aes(x = Leaf_DW, y = Root_DW)) +
+    geom_smooth(method = 'lm') +
+    geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+    xlab('Leaf dry weight (g/m^2)') + ylab('Root dry weight (g/m^2)') +
+    xlim(c(0, max(csv.2025$Leaf_DW, na.rm = TRUE))) + ylim(c(0, max(csv.2025$Root_DW, na.rm = TRUE))) +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~"))) +
+    facet_grid(. ~ year)
+
+girafe(ggobj = plt.spc_dw,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 6, width_svg = 10
+  )
+```
 
 For the 2018 dataset, there is a linear relationship between the logarithmic-transformed leaf dry weight and the leaf percent cover (Figure \@ref(fig:compareSpcDw)). This suggests that there is a saturation of leaf percent cover at larger leaf dry weight/biomass. For example, the stations with a 100% seagrass cover had dry weights ranging from 3.72 g (zos_d_61) up to 5.23 g (zos_a_61).
 
