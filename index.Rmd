@@ -65,6 +65,26 @@ csv.2018 <- local({
  
   output$processing <- factor(output$processing, levels = c('raw.value', 'norm.value'), labels = c('Raw reflectance', 'Min-max normalised reflectance'))
   output$year <- 2018
+  output$Root_DW <- NA
+  
+ output
+})
+```
+
+```{r preprocessing2019}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+
+csv.2019 <- local({
+  output <- read_xlsx('data/2019/Data AGB BGB Bourgneuf 2019.xlsx') %>% 
+    rename(c(Station = Sample_ID, ndvi = NDVI, Leaf_DW = `Leaf biomass (g DW m-2)`, Root_DW = `Rizhome biomass  (g DW m-2)`, Percent_cover = `Seagrass coverage (%)`))
+  
+  output$Wavelength <- NA
+  output$processing <- NA
+  output$value <- NA
+  output$year <- 2019
   
  output
 })
@@ -112,8 +132,7 @@ csv.2025 <- local({
   output$Percent_cover <- NA
   
   output %>%
-    select(-B) %>%
-    rename(Leaf_DW = A)
+    rename(Leaf_DW = A, Root_DW = B)
 })
 ```
 
@@ -123,7 +142,7 @@ csv.2025 <- local({
 #| message: false
 #| warning: false
 
-csv <- rbind(csv.2018, csv.2025)
+csv <- rbind(csv.2018, csv.2019, csv.2025)
 ```
 
 
