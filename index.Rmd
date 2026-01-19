@@ -20,6 +20,7 @@ library(zoo)
 library(ggplot2)
 library(ggiraph)
 library(ggpubr)
+library(patchwork)
 ```
 
 This study looks at the reflectance measurements of the _Zostera noltii_ seagrass at Bourgneuf Bay in 2018 and 2025.
@@ -35,6 +36,9 @@ ASD measurements, seagrass percent cover estimation and sample collection were d
 #| error: false
 #| message: false
 #| warning: false
+
+srf <- read_xlsx('data/COPE-GSEG-EOPG-TN-15-0007 - Sentinel-2 Spectral Response Functions 2022 - 3.2.xlsx', sheet = 'Spectral Responses (S2A)') %>% 
+  filter(SR_WL >= 400, SR_WL <= 900)
 
 csv.2018 <- local({
   biomass <- read.csv('data/2018/2018_09_Bourgneuf_cores_biomass_percent_cover.csv', sep = '\t')
@@ -56,13 +60,14 @@ csv.2018 <- local({
       }) %>%
       unlist()
   
- output <- biomass %>%
-    full_join(reflectance, by = NULL) %>%
+ output <- reflectance %>%
     group_by(Sample_ID) %>%
-    mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), ndvi = (raw.value[wavelength == 800] - raw.value[wavelength == 670])/(raw.value[wavelength == 800] + raw.value[wavelength == 670]), .keep = "all") %>%
+    mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), red = weighted.mean(raw.value, srf$S2A_SR_AV_B4), nir = weighted.mean(raw.value, srf$S2A_SR_AV_B8), ndvi = (nir - red)/(nir + red), .keep = "all") %>%
     ungroup %>%
+    full_join(biomass, by = NULL) %>%
     pivot_longer(cols = c(raw.value, norm.value), names_to = 'processing', values_to = 'value') %>%
-    rename(Wavelength = wavelength, Station = Sample_ID, Leaf_DW = Leaf_dry_weight_g)
+    rename(Wavelength = wavelength, Station = Sample_ID, Leaf_DW = Leaf_dry_weight_g) %>%
+    select(-c(red, nir))
  
   output$processing <- factor(output$processing, levels = c('raw.value', 'norm.value'), labels = c('Raw reflectance', 'Min-max normalised reflectance'))
   output$year <- 2018
@@ -120,8 +125,9 @@ csv.2025 <- local({
     ungroup() %>%
     filter(Wavelength >= 400, Wavelength <= 900) %>%
     group_by(Station) %>%
-    mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), ndvi = (raw.value[Wavelength == 800] - raw.value[Wavelength == 670])/(raw.value[Wavelength == 800] + raw.value[Wavelength == 670]), .keep = "all") %>%
-    ungroup()
+    mutate(norm.value = (raw.value - min(raw.value))/(max(raw.value) - min(raw.value)), red = weighted.mean(raw.value, srf$S2A_SR_AV_B4), nir = weighted.mean(raw.value, srf$S2A_SR_AV_B8), ndvi = (nir - red)/(nir + red), .keep = "all") %>%
+    ungroup() %>%
+    select(-c(red, nir))
   
   output$Station <- output$Station %>%
     gsub('H', "H_", .)  
@@ -156,7 +162,7 @@ csv <- rbind(csv.2018, csv.2019, csv.2025)
 #| error: false
 #| message: false
 #| warning: false
-#| fig.cap: Comparison of leaf biomass to root biomass.
+#| fig.cap: Comparison of leaf biomass to root biomass across all three epochs.
 
 plt.spc_dw <- csv %>%
   select(Station, Leaf_DW, Root_DW, year) %>%
@@ -165,10 +171,38 @@ plt.spc_dw <- csv %>%
   ggplot(aes(x = Leaf_DW, y = Root_DW)) +
     geom_smooth(method = 'lm') +
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
-    xlab('Leaf dry weight (g/m^2)') + ylab('Root dry weight (g/m^2)') +
+    xlab(bquote('Leaf dry weight ('~g/m^2~')')) + ylab(bquote('Root dry weight ('~g/m^2~')')) +
     xlim(c(0, max(csv.2025$Leaf_DW, na.rm = TRUE))) + ylim(c(0, max(csv.2025$Root_DW, na.rm = TRUE))) +
     stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue') +
     facet_grid(. ~ year)
+
+girafe(ggobj = plt.spc_dw,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 5, width_svg = 12
+  )
+```
+
+```{r compileLeafRoot}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of leaf biomass to root biomass, compiled across all three epochs.
+
+plt.spc_dw <- csv %>%
+  select(Station, Leaf_DW, Root_DW, year) %>%
+  unique() %>%
+  filter(Leaf_DW != 0) %>%
+  ggplot(aes(x = Leaf_DW, y = Root_DW)) +
+    geom_smooth(method = 'lm') +
+    geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+    xlab(bquote('Leaf dry weight ('~g/m^2~')')) + ylab(bquote('Root dry weight ('~g/m^2~')')) +
+    xlim(c(0, max(csv.2025$Leaf_DW, na.rm = TRUE))) + ylim(c(0, max(csv.2025$Root_DW, na.rm = TRUE))) +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue')
 
 girafe(ggobj = plt.spc_dw,
          options = list(
@@ -197,7 +231,7 @@ plt.spc_dw <- csv %>%
   ggplot(aes(x = Percent_cover, y = log(Leaf_DW))) +
     geom_smooth(method = 'lm') +
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
-    xlab('Seagrass cover (%)') + ylab('Logarithmic-transformed leaf dry weight (g)') +
+    xlab('Seagrass cover (%)') + ylab(bquote('Logarithmic-transformed leaf dry weight ('~g/m^2~')')) +
     stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue') +
     facet_grid(. ~ year)
 
@@ -222,19 +256,76 @@ Between 2018 and 2025, it is apparent that the 2018 dataset have a higher leaf d
 #| error: false
 #| message: false
 #| warning: false
-#| fig.cap: Comparison of spectroradiometer-derived NDVI against leaf dry weight.
+#| fig.cap: Comparison of spectroradiometer-derived NDVI against leaf dry weight across the three epochs.
 
-plt.ndvi_dw <- csv %>%
+## Linear model
+plt.ndvi_dw.lm <- csv %>%
   select(Station, Percent_cover, Leaf_DW, year, processing, ndvi) %>%
   unique() %>%
-  ggplot(aes(x = ndvi, y = Leaf_DW)) +
+  ggplot(aes(x = Leaf_DW, y = ndvi)) +
     geom_smooth(method = 'lm') +
     geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
-    xlab('Spectroradiometer-derived NDVI') + ylab('Leaf dry weight (g)') +
+    ylab('Spectroradiometer-derived NDVI') + xlab(bquote('Leaf dry weight ('~g/m^2~')')) +
+    ylim(c(0,1)) + xlim(c(0,300)) +
     stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'blue') +
     facet_grid(. ~ year,  scales = 'free')
 
-girafe(ggobj = plt.ndvi_dw,
+girafe(ggobj = plt.ndvi_dw.lm,
+         options = list(
+           opts_hover(css = "stroke-width:1px"),
+           opts_hover_inv(css = "opacity:0.25"),
+           opts_tooltip(opacity = 0.95, css = "padding:4px; font-size:18px")
+         ),
+         height_svg = 5, width_svg = 14
+  )
+```
+
+```{r compileNdviDwNLS}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+#| fig.cap: Comparison of spectroradiometer-derived NDVI against leaf dry weight, compiled.
+
+## Linear model
+plt.ndvi_dw.lm <- csv %>%
+  select(Station, Percent_cover, Leaf_DW, year, processing, ndvi) %>%
+  unique() %>%
+  ggplot(aes(x = Leaf_DW, y = ndvi)) +
+    geom_smooth(method = 'lm', colour = 'black') +
+    geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station, colour = factor(year))) +
+    scale_colour_viridis_d('Year', option = 'turbo') +
+    ylab('Spectroradiometer-derived NDVI') + xlab(bquote('Leaf dry weight ('~g/m^2~')')) +
+    ylim(c(0,1)) +
+    stat_regline_equation(label.x.npc = 'left', label.y.npc = 'top', decreasing = TRUE, aes(label =  paste(..eq.label.., ..adj.rr.label.., sep = "~~~~")), colour = 'black')
+
+## Log model
+csv.log <- csv %>%
+  select(Station, Percent_cover, Leaf_DW, year, ndvi) %>%
+  unique() %>%
+  filter(!is.na(ndvi), !is.na(Leaf_DW))
+
+init.c <- max(csv.log$ndvi, na.rm = TRUE) 
+model.lm <- lm(init.c - ndvi ~ Leaf_DW, data = csv.log)
+model.nls <- nls(ndvi ~ a * (1 - exp(b*Leaf_DW)), data = csv.log, start = list(a = model.lm$coefficients[1], b = model.lm$coefficients[2]))
+model.nls.equation <- substitute(italic(y) == a * (1 - e^(b*x) ) * "," * ~italic("Residual SE") ~ "=" ~ rse, 
+                                 list(x = "x", y = "y",
+                                      a = summary(model.nls)$coefficients[1, 'Estimate'] %>% unname() %>% round(2) %>% format(nsmall = 2),
+                                      b = summary(model.nls)$coefficients[2, 'Estimate'] %>% unname() %>% round(2) %>% format(nsmall = 2),
+                                      rse =  summary(model.nls)$sigma %>% round(2) %>% format(nsmall = 2)
+                                      )) %>% 
+  as.expression() %>%
+  as.character()
+
+plt.ndvi_dw.nls <- ggplot(csv.log, aes(x = Leaf_DW, y = ndvi, colour = factor(year))) +
+  geom_line(data = data.frame(x = csv.log$Leaf_DW, y = predict(model.nls, newdata = csv.log)), aes(x = x, y = y), colour = 'black') +
+  geom_point_interactive(aes(tooltip = paste0("Station: ", Station), data_id = Station)) +
+  scale_colour_viridis_d('Year', option = 'turbo') +
+  ylab('Spectroradiometer-derived NDVI') + xlab(bquote('Leaf dry weight ('~g/m^2~')')) +
+  ylim(c(0,1)) +
+  annotate("text", x = 1, y = Inf, hjust = 0, vjust = 2, label = model.nls.equation, parse = TRUE, colour = 'black')
+
+girafe(ggobj = plt.ndvi_dw.lm + plt.ndvi_dw.nls + plot_layout(axis_titles = 'collect', guides = 'collect'),
          options = list(
            opts_hover(css = "stroke-width:1px"),
            opts_hover_inv(css = "opacity:0.25"),
