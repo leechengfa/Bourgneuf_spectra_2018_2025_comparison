@@ -166,6 +166,7 @@ csv <- rbind(csv.2018, csv.2019, csv.2025)
 
 plt.spc_dw <- csv %>%
   select(Station, Leaf_DW, Root_DW, year) %>%
+  filter(year != 2018) %>%
   unique() %>%
   filter(Leaf_DW != 0) %>%
   ggplot(aes(x = Leaf_DW, y = Root_DW)) +
@@ -186,6 +187,30 @@ girafe(ggobj = plt.spc_dw,
   )
 ```
 
+```{r compareLeafRootStats}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+
+# ## stats comparison
+# csv %>%
+#   select(Station, Leaf_DW, Root_DW, year) %>%
+#   filter(year == 2019) %>%
+#   unique() %>%
+#   filter(Leaf_DW != 0) %>%
+#   lm(formula = Root_DW ~ Leaf_DW, data = .) %>%
+#   summary()
+# 
+# csv %>%
+#   select(Station, Leaf_DW, Root_DW, year) %>%
+#   filter(year == 2025) %>%
+#   unique() %>%
+#   filter(Leaf_DW != 0) %>%
+#   lm(formula = Root_DW ~ Leaf_DW, data = .) %>%
+#   summary()
+```
+
 ```{r compileLeafRoot}
 #| echo: false
 #| error: false
@@ -195,6 +220,7 @@ girafe(ggobj = plt.spc_dw,
 
 plt.spc_dw <- csv %>%
   select(Station, Leaf_DW, Root_DW, year) %>%
+  filter(year != 2018) %>%
   unique() %>%
   filter(Leaf_DW != 0) %>%
   ggplot(aes(x = Leaf_DW, y = Root_DW)) +
@@ -212,6 +238,22 @@ girafe(ggobj = plt.spc_dw,
          ),
          height_svg = 5, width_svg = 12
   )
+```
+
+```{r compileLeafRootStats}
+#| echo: false
+#| error: false
+#| message: false
+#| warning: false
+
+# ## stats comparison
+# csv %>%
+#   select(Station, Leaf_DW, Root_DW, year) %>%
+#   filter(year != 2018) %>%
+#   unique() %>%
+#   filter(Leaf_DW != 0) %>%
+#   lm(formula = Root_DW ~ Leaf_DW, data = .) %>%
+#   summary()
 ```
 
 For the 2018 dataset, there is a linear relationship between the logarithmic-transformed leaf dry weight and the leaf percent cover (Figure \@ref(fig:compareSpcDw)). This suggests that there is a saturation of leaf percent cover at larger leaf dry weight/biomass. For example, the stations with a 100% seagrass cover had dry weights ranging from 3.72 g (zos_d_61) up to 5.23 g (zos_a_61).
